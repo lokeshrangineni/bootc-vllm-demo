@@ -9,19 +9,6 @@ This repo contains a minimal, CPU-only vLLM demo suitable for a MacBook Pro (M3)
 - Internet access on first run to download the model from Hugging Face
 
 
-### Quick test: local generation (uses chat template)
-```bash
-conda activate vllm-bootc-demo
-
-# Optional: choose a different model
-# export VLLM_MODEL="TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-
-python demo_vllm_cpu.py
-```
-
-The script defaults to `TinyLlama/TinyLlama-1.1B-Chat-v1.0`. You can override with `VLLM_MODEL`.
-TinyLlama is kept as the default to work on lower-resource systems.
-
 ### Run the OpenAI-compatible server (CPU)
 ```bash
 conda activate vllm-bootc-demo
@@ -48,8 +35,7 @@ curl -s http://127.0.0.1:${PORT:-8000}/v1/chat/completions \
   }' | jq '.'
 ```
 
-### Server testing via curl (recommended)
-Use the curl example above to test the running server. This keeps the repo minimal and focused on server usage.
+TinyLlama is kept as the default to work on lower-resource systems.
 ### Notes
 - This runs on CPU. Performance is limited compared to NVIDIA GPUs.
 - First run will download model weights to your local Hugging Face cache.
@@ -79,7 +65,6 @@ bootc-vllm-demo/
     build_bootc_qcow2.sh # build bootable qcow2 via bootc-image-builder
   artifacts/             # qcow2 outputs (ignored by git)
   Containerfile.bootc    # bootc OS image definition
-  demo_vllm_cpu.py       # small local generation demo (CPU)
   README.md
 ```
 
@@ -169,6 +154,49 @@ qemu-system-aarch64 -accel hvf -cpu host \
 Once booted, the vLLM service will start automatically. From the host:
 ```bash
 curl -s http://127.0.0.1:8000/v1/models | jq '.'
+```
+
+Chat completion (on-topic, concise)
+```bash
+curl -s http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "messages": [
+      {"role": "system", "content": "You are a concise assistant about vLLM."},
+      {"role": "user", "content": "What is vLLM used for?"}
+    ],
+    "temperature": 0.2,
+    "max_tokens": 200
+  }' | jq '.'
+```
+
+Prompt-style completion (non-chat endpoint)
+```bash
+curl -s http://127.0.0.1:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "prompt": "Summarize vLLM in one sentence.",
+    "temperature": 0.2,
+    "max_tokens": 80
+  }' | jq '.'
+```
+
+Streaming chat completion (Server-Sent Events)
+```bash
+curl -N http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "messages": [
+      {"role": "system", "content": "Stream your answer chunk by chunk."},
+      {"role": "user", "content": "Name three uses of vLLM."}
+    ],
+    "stream": true,
+    "temperature": 0.2,
+    "max_tokens": 120
+  }'
 ```
 
 ### Troubleshooting
