@@ -1,0 +1,52 @@
+# vLLM-only bootc image (CPU-first, optional GPU at runtime)
+# Base: CentOS Stream 9 bootc
+FROM quay.io/centos-bootc/centos-bootc:stream9
+
+# Minimal OS deps (dnf is available; enable CRB for python3.11)
+RUN dnf -y install dnf-plugins-core \
+    && dnf -y config-manager --set-enabled crb \
+    && dnf -y install \
+         python3.11 \
+         python3.11-pip \
+         ca-certificates \
+         git \
+         bash \
+         curl \
+         jq \
+    && update-ca-trust \
+    && dnf clean all
+
+# Create a dedicated venv for vLLM stack
+RUN python3.11 -m venv /opt/vllm-venv
+ENV PATH=/opt/vllm-venv/bin:$PATH
+
+# Install PyTorch CPU wheels and vLLM runtime
+# Note: For GPU nodes, vLLM will need CUDA and host NVIDIA drivers available.
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch \
+    && pip install --no-cache-dir vllm transformers sentencepiece fastapi uvicorn[standard]
+
+# Copy startup script and systemd unit
+COPY bootc/start-vllm.sh /usr/local/bin/start-vllm
+RUN chmod +x /usr/local/bin/start-vllm
+
+COPY bootc/vllm.service /usr/lib/systemd/system/vllm.service
+
+# Enable service at boot (bootc-friendly: create wants symlink)
+RUN mkdir -p /etc/systemd/system/multi-user.target.wants \
+    && ln -sf /usr/lib/systemd/system/vllm.service /etc/systemd/system/multi-user.target.wants/vllm.service
+
+# Default environment (overridable at boot/runtime)
+ENV VLLM_MODEL=TinyLlama/TinyLlama-1.1B-Chat-v1.0 \
+    HOST=0.0.0.0 \
+    PORT=8000 \
+    DTYPE=float32 \
+    VLLM_EXTRA_ARGS=
+
+# Documentation label
+LABEL org.opencontainers.image.title="vLLM bootc image" \
+      org.opencontainers.image.description="Bootable container image providing vLLM OpenAI-compatible server (CPU-first)." \
+      org.opencontainers.image.source="https://example.local/bootc-vllm-demo"
+
+
